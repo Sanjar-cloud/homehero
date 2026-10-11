@@ -2,14 +2,13 @@ import { ObjectId } from 'bson';
 
 export const availableAgentSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews', 'memberRank'];
 export const availableMemberSorts = ['createdAt', 'updatedAt', 'memberLikes', 'memberViews'];
-export const availableOptions = ['propertyBarter', 'propertyRent'];
-export const availablePropertySorts = [
+export const availableServiceSorts = [
 	'createdAt',
 	'updatedAt',
-	'propertyLikes',
-	'propertyViews',
-	'propertyRank',
-	'propertyPrice',
+	'serviceLikes',
+	'serviceViews',
+	'serviceRank',
+	'servicePrice',
 ];
 export const availableCommentSorts = ['createdAt', 'updatedAt'];
 
@@ -28,7 +27,7 @@ export const shapeIntoMongoObjectId = (target: any) => {
 	return typeof target === 'string' ? new ObjectId(target) : target;
 };
 
-export const lookupAuthMemberLiked = (memberId: T, targetRefId: string = '$_id') => {
+export const lookupAuthMemberLiked = (memberId: T | null, targetRefId: string = '$_id') => {
 	return {
 		$lookup: {
 			from: 'likes',
@@ -123,20 +122,23 @@ export const lookupFollowerData = {
 	},
 };
 
-export const lookupFavorite = {
-	$lookup: {
-		from: 'members',
-		localField: 'favoriteProperty.memberId',
-		foreignField: '_id',
-		as: 'favoriteProperty.memberData',
-	},
+// Service responses expose only this provider profile, never the full Member document.
+export const serviceProviderProjection = {
+	_id: 1, memberNick: 1, memberImage: 1, memberDesc: 1, memberServices: 1,
 };
 
-export const lookupVisit = {
+export const lookupServiceProvider = (localField = 'memberId', as = 'memberData', publicOnly = true) => ({
 	$lookup: {
 		from: 'members',
-		localField: 'visitedProperty.memberId',
-		foreignField: '_id',
-		as: 'visitedProperty.memberData',
+		let: { providerId: `$${localField}` },
+		pipeline: [
+			{ $match: { $expr: { $eq: ['$_id', '$$providerId'] } } },
+			...(publicOnly ? [{ $match: { memberType: 'AGENT', memberStatus: 'ACTIVE' } }] : []),
+			{ $project: serviceProviderProjection },
+		],
+		as,
 	},
-};
+});
+
+export const lookupFavorite = lookupServiceProvider('favoriteService.memberId', 'favoriteService.memberData');
+export const lookupVisit = lookupServiceProvider('visitedService.memberId', 'visitedService.memberData');

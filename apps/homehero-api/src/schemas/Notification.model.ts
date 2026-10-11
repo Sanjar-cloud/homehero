@@ -42,9 +42,9 @@ const NotificationSchema = new Schema(
 			ref: 'Member',
 		},
 
-		propertyId: {
+		serviceId: {
 			type: Schema.Types.ObjectId,
-			ref: 'Property',
+			ref: 'Service',
 		},
 
 		articleId: {

@@ -6,9 +6,9 @@ import { LikeInput } from '../../libs/dto/like/like.input';
 import { T } from '../../libs/types/common';
 import { Message } from '../../libs/enums/common.enum';
 import { lookupFavorite } from '../../libs/config';
-import { Properties } from '../../libs/dto/property/property';
+import { Services } from '../../libs/dto/service/service';
 import { LikeGroup } from '../../libs/enums/like.enum';
-import { OrdinaryInquiry } from '../../libs/dto/property/property.input';
+import { OrdinaryInquiry } from '../../libs/dto/service/service.input';
 
 @Injectable()
 export class LikeService {
@@ -41,9 +41,9 @@ export class LikeService {
 		return result ? [{ memberId: memberId, likeRefId: likeRefId, myFavorite: true }] : [];
 	}
 
-	public async getFavoriteProperties(memberId: ObjectId, input: OrdinaryInquiry): Promise<Properties> {
+	public async getFavoriteServices(memberId: ObjectId, input: OrdinaryInquiry): Promise<Services> {
 		const { page, limit } = input;
-		const match: T = { likeGroup: LikeGroup.PROPERTY, memberId: memberId };
+		const match: T = { likeGroup: LikeGroup.SERVICE, memberId: memberId };
 
 		const data: T = await this.likeModel
 			.aggregate([
@@ -51,20 +51,21 @@ export class LikeService {
 				{ $sort: { updatedAt: -1 } },
 				{
 					$lookup: {
-						from: 'properties',
+						from: 'services',
 						localField: 'likeRefId',
 						foreignField: '_id',
-						as: 'favoriteProperty',
+						as: 'favoriteService',
 					},
 				},
-				{ $unwind: '$favoriteProperty' },
+				{ $unwind: '$favoriteService' },
+				{ $match: { 'favoriteService.serviceStatus': 'ACTIVE' } },
+				lookupFavorite,
+				{ $unwind: '$favoriteService.memberData' },
 				{
 					$facet: {
 						list: [
 							{ $skip: (page - 1) * limit },
 							{ $limit: limit },
-							lookupFavorite,
-							{ $unwind: '$favoriteProperty.memberData' },
 						],
 						metaCounter: [{ $count: 'total' }],
 					},
@@ -72,8 +73,8 @@ export class LikeService {
 			])
 			.exec();
 
-		const result: Properties = { list: [], metaCounter: data[0].metaCounter };
-		result.list = data[0].list.map((ele) => ele.favoriteProperty);
+		const result: Services = { list: [], metaCounter: data[0].metaCounter };
+		result.list = data[0].list.map((ele) => ele.favoriteService);
 
 		return result;
 	}

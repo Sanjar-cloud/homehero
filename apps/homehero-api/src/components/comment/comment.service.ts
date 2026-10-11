@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, InternalServerErrorException } from '@
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId } from 'mongoose';
 import { MemberService } from '../member/member.service';
-import { PropertyService } from '../property/property.service';
+import { ServiceService } from '../service/service.service';
 import { BoardArticleService } from '../board-article/board-article.service';
 import { CommentInput, CommentsInquiry } from '../../libs/dto/comment/comment.input';
 import { Direction, Message } from '../../libs/enums/common.enum';
@@ -17,12 +17,15 @@ export class CommentService {
 	constructor(
 		@InjectModel('Comment') private readonly commentModel: Model<Comment>,
 		private readonly memberService: MemberService,
-		private readonly propertyService: PropertyService,
+		private readonly serviceService: ServiceService,
 		private readonly boardArticleService: BoardArticleService,
 	) {}
 
 	public async createComment(memberId: ObjectId, input: CommentInput): Promise<Comment> {
 		input.memberId = memberId;
+		if (input.commentGroup === CommentGroup.SERVICE) {
+			await this.serviceService.assertServiceVisible(input.commentRefId);
+		}
 
 		let result: Comment | null = null;
 		try {
@@ -33,10 +36,10 @@ export class CommentService {
 		}
 
 		switch (input.commentGroup) {
-			case CommentGroup.PROPERTY:
-				await this.propertyService.propertyStatsEditor({
+			case CommentGroup.SERVICE:
+				await this.serviceService.serviceStatsEditor({
 					_id: input.commentRefId,
-					targetKey: 'propertyComments',
+					targetKey: 'serviceComments',
 					modifier: 1,
 				});
 				break;

@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { PropertyResolver } from './property.resolver';
-import { PropertyService } from './property.service';
+import { ServiceResolver } from './service.resolver';
+import { ServiceService } from './service.service';
 import { MongooseModule } from '@nestjs/mongoose';
-import PropertySchema from '../../schemas/Property.model';
+import ServiceSchema from '../../schemas/Service.model';
 import { AuthModule } from '../auth/auth.module';
 import { ViewModule } from '../view/view.module';
-import { MemberService } from '../member/member.service';
+import MemberSchema from '../../schemas/Member.model';
 import { MemberModule } from '../member/member.module';
 import { LikeModule } from '../like/like.module';
 
@@ -13,16 +13,17 @@ import { LikeModule } from '../like/like.module';
 	imports: [
 		MongooseModule.forFeature([
 			{
-				name: 'Property',
-				schema: PropertySchema,
+				name: 'Service',
+				schema: ServiceSchema,
 			},
+			{ name: 'Member', schema: MemberSchema },
 		]),
 		AuthModule,
 		ViewModule,
 		MemberModule,
 		LikeModule,
 	],
-	providers: [PropertyResolver, PropertyService],
-	exports: [PropertyService],
+	providers: [ServiceResolver, ServiceService],
+	exports: [ServiceService],
 })
-export class PropertyModule {}
+export class ServiceModule {}
