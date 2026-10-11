@@ -1,124 +1,101 @@
-import { Logger } from '@nestjs/common';
-import { OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-import { Server } from 'ws';
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { SubscribeMessage, WebSocketGateway } from '@nestjs/websockets';
 import * as WebSocket from 'ws';
+import { Subscription } from 'rxjs';
 import { AuthService } from '../components/auth/auth.service';
-import * as url from 'url';
-import { Member } from '../libs/dto/member/member';
+import { MessageCreatedEvent, MessagingService } from '../components/messaging/messaging.service';
 
-interface MessagePayload {
-	event: string;
-	text: string;
-	memberData: Member | null;
-}
+interface SocketSession { memberId: string; expiresAt: number }
 
-interface InfoPayload {
-	event: string;
-	totalClients: number;
-	memberData: Member | null;
-	action: string;
-}
+@WebSocketGateway({ path: '/ws', maxPayload: 16 * 1024 })
+export class SocketGateway implements OnModuleInit, OnModuleDestroy {
+	private readonly sessions = new Map<WebSocket, SocketSession>();
+	private readonly memberSockets = new Map<string, Set<WebSocket>>();
+	private readonly pending = new Map<WebSocket, ReturnType<typeof setTimeout>>();
+	private readonly authenticating = new Set<WebSocket>();
+	private subscription: Subscription;
 
-@WebSocketGateway({ transports: ['websocket'], secure: false })
-export class SocketGateway implements OnGatewayInit {
-	private logger: Logger = new Logger('SocketEventsGateway');
-	private summaryClient: number = 0;
-	private clientsAuthMap = new Map<WebSocket, Member | null>();
-	private messagesList: MessagePayload[] = [];
+	constructor(private readonly auth: AuthService, private readonly messaging: MessagingService) {}
 
-	constructor(private authService: AuthService) {}
-
-	@WebSocketServer()
-	server: Server;
-
-	public afterInit() {
-		this.logger.verbose(`WebSocket Server Initialized & total: [${this.summaryClient}]`);
+	onModuleInit() {
+		this.subscription = this.messaging.messageEvents.subscribe((event) => {
+			// Delivery is best effort; persistence has already succeeded.
+			void this.deliver(event).catch(() => undefined);
+		});
 	}
-
-	private async retrieveAuth(req: any): Promise<Member | null> {
-		try {
-			const parseUrl = url.parse(req.url, true);
-			const { token } = parseUrl.query;
-			return await this.authService.verifyToken(token as string);
-		} catch (err) {
-			//this.logger.warn(`Auth failed: ${(err as Error).message}`);
-			return null;
+	onModuleDestroy() {
+		this.subscription?.unsubscribe();
+		for (const client of [...this.pending.keys(), ...this.sessions.keys()]) this.close(client);
+	}
+	handleConnection(client: WebSocket) {
+		this.pending.set(client, setTimeout(() => this.close(client), 10000));
+		// Only authentication is accepted from clients. Reject malformed/legacy frames.
+		client.on('message', (raw) => {
+			try {
+				const frame = JSON.parse(raw.toString());
+				if (frame?.event !== 'authenticate' || this.sessions.has(client)) this.close(client);
+			} catch { this.close(client); }
+		});
+	}
+	handleDisconnect(client: WebSocket) {
+		clearTimeout(this.pending.get(client));
+		this.pending.delete(client);
+		this.authenticating.delete(client);
+		const session = this.sessions.get(client);
+		if (session) {
+			const sockets = this.memberSockets.get(session.memberId);
+			sockets?.delete(client);
+			if (!sockets?.size) this.memberSockets.delete(session.memberId);
 		}
+		this.sessions.delete(client);
+	}
+	private close(client: WebSocket) {
+		this.handleDisconnect(client);
+		client.close(1008, 'Authentication or access required');
 	}
 
-	public async handleConnection(client: WebSocket, req: any) {
-		const authMember = await this.retrieveAuth(req);
-		this.summaryClient++;
-		this.clientsAuthMap.set(client, authMember);
-
-		const clientNick: string = authMember?.memberNick ?? 'Guest';
-		this.logger.verbose(`Connected [${clientNick}] & total: [${this.summaryClient}]`);
-
-		const infoMsg: InfoPayload = {
-			event: 'info',
-			totalClients: this.summaryClient,
-			memberData: authMember,
-			action: 'joined',
-		};
-		this.emitMessage(infoMsg);
-		client.send(JSON.stringify({ event: 'getMessages', list: this.messagesList }));
+	@SubscribeMessage('authenticate')
+	async authenticate(client: WebSocket, data: unknown): Promise<void> {
+		if (!this.pending.has(client) || this.authenticating.has(client)) { this.close(client); return; }
+		this.authenticating.add(client);
+		try {
+			const token = (data as { token?: unknown })?.token;
+			if (typeof token !== 'string' || !token) throw new Error();
+			const claims = await this.auth.verifyToken(token) as any;
+			if (!Number.isFinite(claims.exp) || claims.exp * 1000 <= Date.now()) throw new Error();
+			const member = await this.messaging.activeMember(claims._id);
+			// A timeout/disconnect during async authentication must not resurrect a socket.
+			if (!this.pending.has(client) || client.readyState !== WebSocket.OPEN) return;
+			const memberId = String(member._id);
+			this.sessions.set(client, { memberId, expiresAt: claims.exp * 1000 });
+			const sockets = this.memberSockets.get(memberId) ?? new Set<WebSocket>();
+			sockets.add(client);
+			this.memberSockets.set(memberId, sockets);
+			clearTimeout(this.pending.get(client));
+			this.pending.delete(client);
+			client.send(JSON.stringify({ event: 'connection:ready', data: { memberId } }));
+		} catch { this.close(client); }
+		finally { this.authenticating.delete(client); }
 	}
 
-	public handleDisconnect(client: WebSocket) {
-		const authMember = this.clientsAuthMap.get(client) ?? null;
-		this.summaryClient--;
-		this.clientsAuthMap.delete(client);
-
-		const clientNick: string = authMember?.memberNick ?? 'Guest';
-		this.logger.verbose(`Disconnected [${clientNick}] & total: [${this.summaryClient}]`);
-
-		const infoMsg: InfoPayload = {
-			event: 'info',
-			totalClients: this.summaryClient,
-			memberData: authMember,
-			action: 'left',
-		};
-		this.broadcastMessage(client, infoMsg);
-	}
-
-	@SubscribeMessage('message')
-	public handleMessage(client: WebSocket, payload: string): void {
-		const authMember = this.clientsAuthMap.get(client) ?? null;
-		const newMessage: MessagePayload = {
-			event: 'message',
-			text: payload,
-			memberData: authMember,
-		};
-
-		const clientNick: string = authMember?.memberNick ?? 'Guest';
-		this.logger.verbose(`NEW MESSAGE [${clientNick}]: ${payload}`);
-
-		this.messagesList.push(newMessage);
-		if (this.messagesList.length > 5) this.messagesList.splice(0, this.messagesList.length - 5);
-
-		this.emitMessage(newMessage);
-	}
-
-	private broadcastMessage(sender: WebSocket, message: InfoPayload | MessagePayload) {
-		this.server.clients.forEach((client) => {
-			if (client !== sender && client.readyState === WebSocket.OPEN) {
-				client.send(JSON.stringify(message));
+	private async deliver(event: MessageCreatedEvent): Promise<void> {
+		await Promise.all([event.userId, event.agentId].map(async (id) => {
+			const memberId = String(id);
+			const sockets = [...(this.memberSockets.get(memberId) ?? [])];
+			if (!sockets.length) return;
+			try { await this.messaging.authorizeDelivery(memberId, event.message.conversationId); }
+			catch { for (const client of sockets) this.close(client); return; }
+			for (const client of sockets) {
+				const session = this.sessions.get(client);
+				if (!session) continue;
+				if (session.expiresAt <= Date.now()) { this.close(client); continue; }
+				if (client.readyState !== WebSocket.OPEN) { this.handleDisconnect(client); continue; }
+				try {
+					client.send(JSON.stringify({ event: 'message:new', data: event.message }), (error) => {
+						if (error) this.close(client);
+					});
+				} catch { this.close(client); }
 			}
-		});
-	}
-
-	private emitMessage(message: InfoPayload | MessagePayload) {
-		this.server.clients.forEach((client) => {
-			if (client.readyState === WebSocket.OPEN) {
-				client.send(JSON.stringify(message));
-			}
-		});
+		}));
 	}
 }
-
-/*
-MESSAGE TARGET:
-1. Client (only client)
-2. Broadcast (except client)
-3. Emit (all clients)
-*/
