@@ -4,8 +4,8 @@ import { BatchService } from './batch.service';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './database/database.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import PropertySchema from 'apps/nestar-api/src/schemas/Property.model';
-import MemberSchema from 'apps/nestar-api/src/schemas/Member.model';
+import PropertySchema from 'apps/homehero-api/src/schemas/Property.model';
+import MemberSchema from 'apps/homehero-api/src/schemas/Member.model';
 import { MongooseModule } from '@nestjs/mongoose';
 
 @Module({

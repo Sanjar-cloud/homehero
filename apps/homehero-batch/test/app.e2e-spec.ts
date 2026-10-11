@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { NestarBatchModule } from '../src/batch.module';
 
-describe('NestarBatchController (e2e)', () => {
+describe('HomeHeroBatchController (e2e)', () => {
 	let app: INestApplication;
 
 	beforeEach(async () => {
