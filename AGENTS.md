@@ -2,7 +2,7 @@
 
 ## 1. Project Context
 
-HomeHero is a production-oriented home services platform built by gradually transforming a duplicated copy of the original Nestar backend.
+HomeHero is a portfolio-oriented home services platform with production-readiness goals, built by gradually transforming a duplicated copy of the original Nestar backend.
 
 The project will eventually be deployed to a VPS using production DevOps practices.
 
@@ -70,7 +70,9 @@ Follow this workflow:
 7. Summarize the actual changes, test results, limitations, and remaining risks.
 8. Stop before beginning another phase.
 
-Approval of an overall roadmap does not authorize every implementation phase.
+Approval of an overall roadmap does not authorize every implementation phase. Migration roadmaps are proposals, not completion records.
+
+Once a specific phase and file scope are explicitly approved, continue within that scope without requesting the same approval again. Material scope expansion still requires new approval.
 
 Never assume permission to modify code based only on a discussion, recommendation, or proposed plan.
 
@@ -100,8 +102,12 @@ Rules:
 - Keep GraphQL resolvers thin.
 - Place business logic in services.
 - Follow existing project conventions and source directories.
+- Preserve the original Nestar architecture and existing working behavior wherever practical. Change them only when required by the approved HomeHero scope.
+- Preserve existing file organization, naming conventions, and local TypeScript formatting.
+- Do not copy legacy defects or introduce abstractions solely to imitate old code.
 - Preserve existing application names until the rename phase is approved.
 - Keep GraphQL contract changes explicit.
+- Preserve existing GraphQL contracts and frontend integration unless an explicitly approved change requires otherwise.
 - Trace affected filters, counters, social interactions, notifications, and batch dependencies.
 - Avoid unrelated refactoring.
 - Do not introduce unnecessary frameworks, microservices, message brokers, or new dependencies.
@@ -177,6 +183,8 @@ Use the project's existing tools and conventions.
 - Avoid commands that download packages without approval.
 - During read-only analysis, use checks that do not modify files or databases.
 - Do not run automatic formatting or rewriting lint commands without approval.
+- The existing `npm run lint` script uses `--fix` and rewrites files. Do not use it for read-only checks. Use the installed ESLint executable without fixes against approved files.
+- Keep npm and the existing `package-lock.json` for backend commands; the frontend Yarn convention does not apply to this repository.
 - Run focused tests for approved changes.
 - Validate both API and batch applications when relevant.
 - Distinguish typechecking, builds, unit tests, integration tests, and live runtime verification.
@@ -188,6 +196,10 @@ Report unverified behavior explicitly.
 ## 8. Progress Tracking
 
 Keep documentation minimal.
+
+After major changes affecting setup, architecture, public contracts, or important user flows, update relevant existing documentation only within the approved file scope. Include documentation paths in the implementation plan before approval. Update the existing `README.md` when relevant; small fixes do not require updates to every document.
+
+If a strict file scope excludes documentation, do not modify additional files. Report the documentation gap in the final report. Create new documentation files only with explicit approval.
 
 After each approved implementation phase:
 

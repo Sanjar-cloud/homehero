@@ -26,7 +26,7 @@ Use this skill for:
 
 Before implementation:
 
-1. 1. Read `AGENTS.md`, `SKILLS.md`, and the relevant project skill.
+1. Read `AGENTS.md`, `SKILLS.md`, and the relevant project skill.
 2. Inspect the affected source code.
 3. Prepare a bounded implementation plan.
 4. Wait for explicit user approval.
