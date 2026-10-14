@@ -1,61 +1,79 @@
 # HomeHero Backend Agent Instruction
 
-HomeHero is a NestJS GraphQL monorepo migrated from a real estate platform into a home services marketplace platform.
+HomeHero is a NestJS GraphQL monorepo migrated from a real estate
+platform into a home services marketplace platform.
 
 ## Read First
 
-Before changing code, read the current AI handoff docs:
-
-- `docs/ai/BACKEND_MIGRATION.md`
-- `docs/ai/DECISIONS.md`
-- `docs/ai/COMPLETED_TASKS.md`
-- `docs/ai/NEXT_STEPS.md`
-
-Use those files as the source of truth for AI Agent related migration history, accepted decisions, remaining work and validation status.
+- Read AGENTS.md, SKILLS.md and the relevant project skill.
+- Read existing migration documentation when available.
+- Verify API contracts and business logic from actual source code.
+- Do not assume missing documentation exists.
 
 ## Project Shape
 
-- Backend apps are `homehero-api` and `homehero-batch`.
-- Keep the existing NestJS resolver/service/module pattern based on MVC and DI.
-- Keep DTOs, enums, schemas under `apps/homehero-api/src/libs`.
-- Keep shared modules reusable: auth, member, like, view, comment, follow, board article, socket.
+- Backend apps are homehero-api and homehero-batch.
+- Keep the existing NestJS resolver/service/module pattern and DI.
+- Keep resolvers thin and business logic in services.
+- Keep DTOs and enums under apps/homehero-api/src/libs.
+- Keep Mongoose schemas under apps/homehero-api/src/schemas.
+- Preserve existing folders, naming conventions and imports.
+- Keep shared modules reusable: auth, member, service, like, view,
+  comment, follow, messaging, review and socket.
+- Follow existing HomeHero/Nestar coding conventions.
+- Write simple, readable TypeScript with focused functions and
+  readable multiline queries and aggregation pipelines.
+- Prefer existing patterns over unnecessary abstractions.
 
 ## Domain Rules
 
-- Use HomeHero/service terminology for the main catalog entity.
-- Do not reintroduce property or real-estate fields.
-- Keep `MemberType.USER`, `MemberType.AGENT` and `MemberType.ADMIN` unchanged.
-- Service ownership continues to use `MemberType.AGENT` unless a later migration explicitly changes it.
-- Service enum values are:
-  - `serviceType`: use the existing HomeHero ServiceType values.
-  - `serviceCategory`: use the existing HomeHero service category values.
-  - `serviceStatus`: use the existing HomeHero ServiceStatus values.
+- Use HomeHero/Service terminology for the main catalog entity.
+- Do not reintroduce Property or real estate fields.
+- Keep MemberType.USER, MemberType.AGENT and MemberType.ADMIN unchanged.
+- Service ownership continues to use MemberType.AGENT.
+- Use existing ServiceCategory, ServiceStatus and ServiceLocation enums.
+- Do not introduce new fields, APIs or business rules without approval.
+- Preserve existing authorization, ownership, counters, pagination,
+  messaging participant restrictions and Review behavior.
 
 ## Workflow
 
 1. Analyze before editing.
-2. Treat questions, explanations, analysis, and planning as read-only unless the user explicitly asks to implement changes.
-3. Do not modify files, install dependencies, or run commands that change project state during read-only work.
-4. Keep changes small and consistent with existing project patterns.
-5. Do not remove working logic unless it is replaced safely.
-6. Update `docs/ai/COMPLETED_TASKS.md` after major completed work.
+2. Treat questions, explanations, analysis and planning as read-only.
+3. Prepare a small plan and wait for explicit implementation approval.
+4. Do not modify files, install dependencies or change project state
+   during read-only work.
+5. Make small changes within the approved file scope.
+6. Do not remove working logic unless replaced safely.
 7. Add or update focused tests when behavior changes.
+8. Briefly explain changed files, their purpose and validation results.
+9. Do not modify database records, environment files, dependencies,
+   commit, push or deploy without separate approval.
+10. Never expose passwords, tokens or database connection strings.
 
 ## Validation
 
-Use these checks for backend work:
+Use installed local tools and npm for backend commands:
 
-```bash
-npx tsc -p apps/homehero-api/tsconfig.app.json --noEmit
-npx tsc -p apps/homehero-batch/tsconfig.app.json --noEmit
+./node_modules/.bin/tsc -p apps/homehero-api/tsconfig.app.json --noEmit --incremental false
+./node_modules/.bin/tsc -p apps/homehero-batch/tsconfig.app.json --noEmit --incremental false
 npm run build
-```
 
-`npm run lint` runs ESLint with `--fix`, so use it only when file rewriting is acceptable!
+Run relevant focused tests. Report existing failures separately
+from new regressions.
+
+npm run lint uses --fix. Do not run it unless automatic file
+rewriting is explicitly approved.
+
+Do not claim live integration passed unless it was actually tested.
+Use mocked tests without live database writes unless separately approved.
 
 ## Communication
 
-- Use English for coding, technical reasoning, development instructions, code, naming, and project implementation.
+- Use English for code, comments, documentation, development
+  instructions and naming.
 - Communicate with the user in Uzbek.
-- Keep technical terms, file names, class names, function names, commands, and identifiers in English.
-- Use Uzbek for explanations, plans, questions, summaries, and final reports.
+- Keep technical terms, file names, class names, function names,
+  commands and identifiers in English.
+- Use Uzbek for explanations, technical reasoning, plans,
+  questions, summaries and final reports.

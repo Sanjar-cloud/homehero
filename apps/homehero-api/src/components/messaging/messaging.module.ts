@@ -10,11 +10,15 @@ import { MessagingResolver } from './messaging.resolver';
 import { MessagingGuard } from './messaging.guard';
 
 @Module({
-	imports: [AuthModule, ServiceModule, MongooseModule.forFeature([
-		{ name: 'Conversation', schema: ConversationSchema },
-		{ name: 'Message', schema: MessageSchema },
-		{ name: 'Member', schema: MemberSchema },
-	])],
+	imports: [
+		AuthModule,
+		ServiceModule,
+		MongooseModule.forFeature([
+			{ name: 'Conversation', schema: ConversationSchema },
+			{ name: 'Message', schema: MessageSchema },
+			{ name: 'Member', schema: MemberSchema },
+		]),
+	],
 	providers: [MessagingService, MessagingResolver, MessagingGuard],
 	exports: [MessagingService],
 })

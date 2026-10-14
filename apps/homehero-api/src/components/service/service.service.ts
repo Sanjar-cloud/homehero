@@ -29,14 +29,21 @@ export class ServiceService {
 	private async getProvider(memberId: ObjectId, publicOnly = true): Promise<ServiceProvider> {
 		const search: T = { _id: memberId };
 		if (publicOnly) Object.assign(search, { memberType: MemberType.AGENT, memberStatus: MemberStatus.ACTIVE });
-		const member = await this.memberModel.findOne(search).select(serviceProviderProjection).lean<ServiceProvider>().exec();
+		const member = await this.memberModel
+			.findOne(search)
+			.select(serviceProviderProjection)
+			.lean<ServiceProvider>()
+			.exec();
 		if (!member) throw new BadRequestException(Message.NO_DATA_FOUND);
 		return member;
 	}
 
 	// Used by likes/comments without recording a view or exposing private account fields.
 	public async assertServiceVisible(serviceId: ObjectId): Promise<Service> {
-		const service = await this.serviceModel.findOne({ _id: serviceId, serviceStatus: ServiceStatus.ACTIVE }).lean<Service>().exec();
+		const service = await this.serviceModel
+			.findOne({ _id: serviceId, serviceStatus: ServiceStatus.ACTIVE })
+			.lean<Service>()
+			.exec();
 		if (!service) throw new BadRequestException(Message.NO_DATA_FOUND);
 		service.memberData = await this.getProvider(service.memberId);
 		return service;
@@ -81,7 +88,10 @@ export class ServiceService {
 	}
 
 	private async updateListing(search: T, input: ServiceUpdate): Promise<Service> {
-		const current = await this.serviceModel.findOne({ ...search, serviceStatus: { $ne: ServiceStatus.DELETE } }).lean().exec();
+		const current = await this.serviceModel
+			.findOne({ ...search, serviceStatus: { $ne: ServiceStatus.DELETE } })
+			.lean()
+			.exec();
 		if (!current) throw new BadRequestException(Message.UPDATE_FAILED);
 		const nextStatus = input.serviceStatus ?? current.serviceStatus;
 		const fields = this.editableFields(input);
@@ -93,26 +103,41 @@ export class ServiceService {
 			update.$unset = { servicePrice: 1 };
 		}
 		// Compare the observed status so concurrent transitions cannot apply the same counter delta twice.
-		const result = await this.serviceModel.findOneAndUpdate(
-			{ ...search, serviceStatus: current.serviceStatus }, update, { new: true, runValidators: true },
-		).exec();
+		const result = await this.serviceModel
+			.findOneAndUpdate(
+				{ ...search, serviceStatus: current.serviceStatus },
+				update,
+				{ new: true, runValidators: true },
+			)
+			.exec();
 		if (!result) throw new BadRequestException(Message.UPDATE_FAILED);
 		const modifier = Number(nextStatus === ServiceStatus.ACTIVE) - Number(current.serviceStatus === ServiceStatus.ACTIVE);
 		if (modifier) await this.memberService.memberStatsEditor({ _id: current.memberId, targetKey: 'memberServices', modifier });
 		return result;
 	}
 
-	private async listServices(match: T, input: OrdinaryInquiry & { sort?: string; direction?: Direction }, memberId: ObjectId | null, publicOnly: boolean): Promise<Services> {
+	private async listServices(
+		match: T,
+		input: OrdinaryInquiry & { sort?: string; direction?: Direction },
+		memberId: ObjectId | null,
+		publicOnly: boolean,
+	): Promise<Services> {
 		if (input.sort === 'servicePrice' && !match.servicePrice) match.servicePrice = { $type: 'number' };
 		const pipeline: PipelineStage[] = [
 			{ $match: match },
 			lookupServiceProvider('memberId', 'memberData', publicOnly),
 			{ $unwind: { path: '$memberData', preserveNullAndEmptyArrays: !publicOnly } },
 			{ $sort: { [input.sort ?? 'createdAt']: input.direction ?? Direction.DESC } },
-			{ $facet: {
-				list: [{ $skip: (input.page - 1) * input.limit }, { $limit: input.limit }, lookupAuthMemberLiked(memberId)],
-				metaCounter: [{ $count: 'total' }],
-			} },
+			{
+				$facet: {
+					list: [
+						{ $skip: (input.page - 1) * input.limit },
+						{ $limit: input.limit },
+						lookupAuthMemberLiked(memberId),
+					],
+					metaCounter: [{ $count: 'total' }],
+				},
+			},
 		];
 		const result = await this.serviceModel.aggregate<Services>(pipeline).exec();
 		return result[0] ?? { list: [], metaCounter: [] };
@@ -141,7 +166,12 @@ export class ServiceService {
 	public async getAgentServices(memberId: ObjectId, input: AgentServicesInquiry): Promise<Services> {
 		await this.getProvider(memberId);
 		if (input.search.serviceStatus === ServiceStatus.DELETE) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
-		return this.listServices({ memberId, serviceStatus: input.search.serviceStatus ?? { $in: [ServiceStatus.ACTIVE, ServiceStatus.PAUSED] } }, input, memberId, false);
+		return this.listServices(
+			{ memberId, serviceStatus: input.search.serviceStatus ?? { $in: [ServiceStatus.ACTIVE, ServiceStatus.PAUSED] } },
+			input,
+			memberId,
+			false,
+		);
 	}
 
 	public async likeTargetService(memberId: ObjectId, serviceId: ObjectId): Promise<Service> {
@@ -165,12 +195,20 @@ export class ServiceService {
 	}
 
 	public async removeServiceByAdmin(serviceId: ObjectId): Promise<Service> {
-		const result = await this.serviceModel.findOneAndDelete({ _id: serviceId, serviceStatus: ServiceStatus.DELETE }).exec();
+		const result = await this.serviceModel
+			.findOneAndDelete({ _id: serviceId, serviceStatus: ServiceStatus.DELETE })
+			.exec();
 		if (!result) throw new BadRequestException(Message.REMOVE_FAILED);
 		return result;
 	}
 
 	public async serviceStatsEditor(input: StatisticModifier): Promise<Service | null> {
-		return this.serviceModel.findByIdAndUpdate(input._id, { $inc: { [input.targetKey]: input.modifier } }, { new: true, runValidators: true }).exec();
+		return this.serviceModel
+			.findByIdAndUpdate(
+				input._id,
+				{ $inc: { [input.targetKey]: input.modifier } },
+				{ new: true, runValidators: true },
+			)
+			.exec();
 	}
 }

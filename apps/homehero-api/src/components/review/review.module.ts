@@ -7,10 +7,13 @@ import { ReviewResolver } from './review.resolver';
 import { ReviewService } from './review.service';
 
 @Module({
-	imports: [AuthModule, MongooseModule.forFeature([
-		{ name: 'Review', schema: ReviewSchema },
-		{ name: 'Member', schema: MemberSchema },
-	])],
+	imports: [
+		AuthModule,
+		MongooseModule.forFeature([
+			{ name: 'Review', schema: ReviewSchema },
+			{ name: 'Member', schema: MemberSchema },
+		]),
+	],
 	providers: [ReviewResolver, ReviewService],
 })
 export class ReviewModule {}
