@@ -1,3 +1,4 @@
+import { SupportModule } from './support/support.module';
 import { ReviewModule } from './review/review.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { Module } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { BoardArticleModule } from './board-article/board-article.module';
 
 @Module({
 	imports: [
+		SupportModule,
 		MessagingModule,
 		ReviewModule,
 		MemberModule,
