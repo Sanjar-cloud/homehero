@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, ObjectId, PipelineStage } from 'mongoose';
+import { Model, ObjectId, PipelineStage, Types } from 'mongoose';
 import { Service, ServiceProvider, Services } from '../../libs/dto/service/service';
 import { Member } from '../../libs/dto/member/member';
 import { MemberService } from '../member/member.service';
@@ -16,6 +16,9 @@ import { lookupAuthMemberLiked, lookupServiceProvider, serviceProviderProjection
 import { LikeService } from '../like/like.service';
 import { LikeGroup } from '../../libs/enums/like.enum';
 
+import { NotificationService } from '../notification/notification.service';
+import { NotificationGroup, NotificationType } from '../../libs/enums/notification.enum';
+
 @Injectable()
 export class ServiceService {
 	constructor(
@@ -24,6 +27,7 @@ export class ServiceService {
 		private viewService: ViewService,
 		private likeService: LikeService,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly notifications: NotificationService,
 	) {}
 
 	private async getProvider(memberId: ObjectId, publicOnly = true): Promise<ServiceProvider> {
@@ -87,7 +91,7 @@ export class ServiceService {
 		return this.updateListing({ _id: input._id, memberId }, input);
 	}
 
-	private async updateListing(search: T, input: ServiceUpdate): Promise<Service> {
+	private async updateListing(search: T, input: ServiceUpdate, adminId?: ObjectId): Promise<Service> {
 		const current = await this.serviceModel
 			.findOne({ ...search, serviceStatus: { $ne: ServiceStatus.DELETE } })
 			.lean()
@@ -113,6 +117,14 @@ export class ServiceService {
 		if (!result) throw new BadRequestException(Message.UPDATE_FAILED);
 		const modifier = Number(nextStatus === ServiceStatus.ACTIVE) - Number(current.serviceStatus === ServiceStatus.ACTIVE);
 		if (modifier) await this.memberService.memberStatsEditor({ _id: current.memberId, targetKey: 'memberServices', modifier });
+		if (adminId && current.serviceStatus !== nextStatus) {
+			await this.notifications.record({
+				eventKey: `service:${String(result._id)}:${String(new Types.ObjectId())}`,
+				notificationType: NotificationType.SERVICE_STATUS, notificationGroup: NotificationGroup.SERVICE,
+				notificationTitle: result.serviceTitle, authorId: adminId, receiverId: result.memberId,
+				serviceId: result._id, serviceStatus: nextStatus,
+			});
+		}
 		return result;
 	}
 
@@ -190,8 +202,11 @@ export class ServiceService {
 		return this.listServices(match, input, null, false);
 	}
 
-	public async updateServiceByAdmin(input: ServiceUpdate): Promise<Service> {
-		return this.updateListing({ _id: input._id }, input);
+	public async updateServiceByAdmin(input: ServiceUpdate, adminId: ObjectId): Promise<Service> {
+		if (!adminId) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		const admin = await this.memberModel.findOne({ _id: adminId, memberType: MemberType.ADMIN, memberStatus: MemberStatus.ACTIVE }).select('_id').lean().exec();
+		if (!admin) throw new BadRequestException(Message.NOT_ALLOWED_REQUEST);
+		return this.updateListing({ _id: input._id }, input, adminId);
 	}
 
 	public async removeServiceByAdmin(serviceId: ObjectId): Promise<Service> {

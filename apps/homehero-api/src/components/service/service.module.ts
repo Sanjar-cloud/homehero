@@ -1,3 +1,4 @@
+import { NotificationModule } from '../notification/notification.module';
 import { Module } from '@nestjs/common';
 import { ServiceResolver } from './service.resolver';
 import { ServiceService } from './service.service';
@@ -11,6 +12,7 @@ import { LikeModule } from '../like/like.module';
 
 @Module({
 	imports: [
+		NotificationModule,
 		MongooseModule.forFeature([
 			{
 				name: 'Service',

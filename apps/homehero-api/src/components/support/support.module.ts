@@ -1,3 +1,4 @@
+import { NotificationModule } from '../notification/notification.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
@@ -9,6 +10,7 @@ import { SupportService } from './support.service';
 
 @Module({
 	imports: [
+		NotificationModule,
 		AuthModule,
 		MongooseModule.forFeature([
 			{ name: 'Member', schema: MemberSchema },

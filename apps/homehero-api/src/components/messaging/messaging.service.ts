@@ -22,6 +22,8 @@ export interface MessageCreatedEvent {
 const memberProjection = { _id: 1, memberNick: 1, memberImage: 1 };
 const messageProjection = { _id: 1, conversationId: 1, senderId: 1, text: 1, serviceContext: 1, createdAt: 1 };
 
+import { NotificationService } from '../notification/notification.service';
+
 @Injectable()
 export class MessagingService {
 	private readonly messageCreated = new Subject<MessageCreatedEvent>();
@@ -32,6 +34,7 @@ export class MessagingService {
 		@InjectModel('Message') private readonly messageModel: Model<ChatMessage>,
 		@InjectModel('Member') private readonly memberModel: Model<MessagingMember>,
 		private readonly serviceService: ServiceService,
+		private readonly notifications: NotificationService,
 	) {}
 
 	private denied(): never {
@@ -252,6 +255,8 @@ export class MessagingService {
 			serviceContext: saved.serviceContext,
 			createdAt: saved.createdAt,
 		};
+		const receiverId = String(member._id) === String(conversation.userId) ? conversation.agentId : conversation.userId;
+		await this.notifications.record(this.notifications.messageEvent(message, receiverId));
 		this.messageCreated.next({ message, userId: conversation.userId, agentId: conversation.agentId });
 		return message;
 	}

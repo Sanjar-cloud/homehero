@@ -5,6 +5,8 @@ import { Subscription } from 'rxjs';
 import { AuthService } from '../components/auth/auth.service';
 import { MessageCreatedEvent, MessagingService } from '../components/messaging/messaging.service';
 
+import { NotificationService } from '../components/notification/notification.service';
+
 interface SocketSession { memberId: string; expiresAt: number }
 
 @WebSocketGateway({ path: '/ws', maxPayload: 16 * 1024 })
@@ -14,10 +16,14 @@ export class SocketGateway implements OnModuleInit, OnModuleDestroy {
 	private readonly pending = new Map<WebSocket, ReturnType<typeof setTimeout>>();
 	private readonly authenticating = new Set<WebSocket>();
 	private subscription: Subscription;
+	private notificationSubscription: Subscription;
 
-	constructor(private readonly auth: AuthService, private readonly messaging: MessagingService) {}
+	constructor(private readonly auth: AuthService, private readonly messaging: MessagingService, private readonly notifications: NotificationService) {}
 
 	onModuleInit() {
+		this.notificationSubscription = this.notifications.changes.subscribe((memberId) => {
+			void this.notify(memberId).catch(() => undefined);
+		});
 		this.subscription = this.messaging.messageEvents.subscribe((event) => {
 			// Delivery is best effort; persistence has already succeeded.
 			void this.deliver(event).catch(() => undefined);
@@ -25,6 +31,7 @@ export class SocketGateway implements OnModuleInit, OnModuleDestroy {
 	}
 	onModuleDestroy() {
 		this.subscription?.unsubscribe();
+		this.notificationSubscription?.unsubscribe();
 		for (const client of [...this.pending.keys(), ...this.sessions.keys()]) this.close(client);
 	}
 	handleConnection(client: WebSocket) {
@@ -76,6 +83,24 @@ export class SocketGateway implements OnModuleInit, OnModuleDestroy {
 			client.send(JSON.stringify({ event: 'connection:ready', data: { memberId } }));
 		} catch { this.close(client); }
 		finally { this.authenticating.delete(client); }
+	}
+
+	private async notify(memberId: string): Promise<void> {
+		const sockets = [...(this.memberSockets.get(memberId) ?? [])];
+		if (!sockets.length) return;
+		try { await this.notifications.activeMember(memberId); }
+		catch { for (const client of sockets) this.close(client); return; }
+		for (const client of sockets) {
+			const session = this.sessions.get(client);
+			if (!session) continue;
+			if (session.expiresAt <= Date.now()) { this.close(client); continue; }
+			if (client.readyState !== WebSocket.OPEN) { this.handleDisconnect(client); continue; }
+			try {
+				client.send(JSON.stringify({ event: 'notification:changed', data: { memberId } }), (error) => {
+					if (error) this.close(client);
+				});
+			} catch { this.close(client); }
+		}
 	}
 
 	private async deliver(event: MessageCreatedEvent): Promise<void> {

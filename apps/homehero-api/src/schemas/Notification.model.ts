@@ -47,6 +47,14 @@ const NotificationSchema = new Schema(
 			ref: 'Service',
 		},
 
+		eventKey: { type: String },
+		receiptOnly: { type: Boolean, default: false },
+		conversationId: { type: Schema.Types.ObjectId, ref: 'Conversation' },
+		messageId: { type: Schema.Types.ObjectId, ref: 'Message' },
+		supportRequestId: { type: Schema.Types.ObjectId, ref: 'SupportRequest' },
+		authorNick: { type: String },
+		serviceStatus: { type: String, enum: ['ACTIVE', 'PAUSED', 'DELETE'] },
+
 		articleId: {
 			type: Schema.Types.ObjectId,
 			ref: 'BoardArticle',
@@ -54,5 +62,11 @@ const NotificationSchema = new Schema(
 	},
 	{ timestamps: true, collection: 'notifications' },
 );
+
+// Legacy notifications have no eventKey and are excluded from the unique index.
+NotificationSchema.index({ eventKey: 1 }, { unique: true, partialFilterExpression: { eventKey: { $type: 'string' } } });
+NotificationSchema.index({ receiverId: 1, createdAt: -1, _id: -1 });
+NotificationSchema.index({ receiverId: 1, notificationStatus: 1 });
+NotificationSchema.index({ receiverId: 1, conversationId: 1, messageId: 1 });
 
 export default NotificationSchema;

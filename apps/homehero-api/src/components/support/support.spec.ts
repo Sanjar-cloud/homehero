@@ -61,10 +61,21 @@ function harness() {
 			}),
 		})),
 	};
-	return { service: new SupportService(notices as any, requests as any, members as any), accounts, notices, requests, members };
+	const notifications = { record: jest.fn().mockResolvedValue(undefined) };
+	return { service: new SupportService(notices as any, requests as any, members as any, notifications as any), accounts, notices, requests, members, notifications };
 }
 
 describe('Support (offline)', () => {
+	it('notifies only the request owner once after an atomic ADMIN reply, never on a duplicate reply', async () => {
+		const h = harness();
+		await h.service.replySupportRequest(adminId, { _id: String(requestId), reply: 'Answer' });
+		expect(h.notifications.record).toHaveBeenCalledWith(expect.objectContaining({
+			eventKey: `support:${String(requestId)}`, notificationType: 'SUPPORT_REPLY', receiverId: userId, authorId: adminId,
+		}));
+		await expect(h.service.replySupportRequest(adminId, { _id: String(requestId), reply: 'Again' })).rejects.toBeInstanceOf(ConflictException);
+		expect(h.notifications.record).toHaveBeenCalledTimes(1);
+	});
+
 	it('creates only allowlisted English/optional translation fields with the authenticated admin', async () => {
 		const { service, notices } = harness();
 		await service.createSupportNotice(adminId, {

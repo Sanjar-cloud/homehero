@@ -1,6 +1,6 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { MemberService } from './member.service';
-import { InternalServerErrorException, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { AgentsInquiry, LoginInput, MemberInput, MembersInquiry } from '../../libs/dto/member/member.input';
 import { Member, Members } from '../../libs/dto/member/member';
 import { AuthGuard } from '../auth/guards/auth.guard';
@@ -23,7 +23,6 @@ export class MemberResolver {
 	@Mutation(() => Member)
 	public async signup(@Args('input') input: MemberInput): Promise<Member> {
 		console.log('Mutation: signup');
-		console.log('input:', input);
 		return await this.memberService.signup(input);
 	}
 
@@ -112,9 +111,12 @@ export class MemberResolver {
 	public async imageUploader(
 		@Args({ name: 'file', type: () => GraphQLUpload })
 		{ createReadStream, filename, mimetype }: FileUpload,
-		@Args('target') target: String,
+		@Args('target') target: string,
 	): Promise<string> {
 		console.log('Mutation: imageUploader');
+		if (!['member', 'service', 'article', 'property'].includes(target)) {
+			throw new BadRequestException('Invalid upload target.');
+		}
 
 		if (!filename) throw new Error(Message.UPLOAD_FAILED);
 		const validMime = validMimeTypes.includes(mimetype);
@@ -140,9 +142,12 @@ export class MemberResolver {
 	public async imagesUploader(
 		@Args('files', { type: () => [GraphQLUpload] })
 		files: Promise<FileUpload>[],
-		@Args('target') target: String,
+		@Args('target') target: string,
 	): Promise<string[]> {
 		console.log('Mutation: imagesUploader');
+		if (!['member', 'service', 'article', 'property'].includes(target)) {
+			throw new BadRequestException('Invalid upload target.');
+		}
 
 		const uploadedImages: string[] = [];
 		const promisedList = files.map(async (img: Promise<FileUpload>, index: number): Promise<Promise<void>> => {

@@ -136,10 +136,10 @@ export class ServiceResolver {
 	@Roles(MemberType.ADMIN)
 	@UseGuards(RolesGuard)
 	@Mutation((returns) => Service)
-	public async updateServiceByAdmin(@Args('input') input: ServiceUpdate): Promise<Service> {
+	public async updateServiceByAdmin(@Args('input') input: ServiceUpdate, @AuthMember('_id') memberId: ObjectId): Promise<Service> {
 		console.log('Mutation: updateServiceByAdmin');
 		input._id = this.parseServiceId(input._id);
-		return await this.serviceService.updateServiceByAdmin(input);
+		return await this.serviceService.updateServiceByAdmin(input, memberId);
 	}
 
 	@Roles(MemberType.ADMIN)

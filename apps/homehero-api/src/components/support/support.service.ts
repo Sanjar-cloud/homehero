@@ -19,12 +19,16 @@ import { MemberStatus, MemberType } from '../../libs/enums/member.enum';
 import { NoticeCategory, NoticeStatus } from '../../libs/enums/notice.enum';
 import { SupportRequestStatus } from '../../libs/enums/support.enum';
 
+import { NotificationService } from '../notification/notification.service';
+import { NotificationGroup, NotificationType } from '../../libs/enums/notification.enum';
+
 @Injectable()
 export class SupportService {
 	constructor(
 		@InjectModel('Notice') private readonly noticeModel: Model<SupportNotice>,
 		@InjectModel('SupportRequest') private readonly requestModel: Model<SupportRequest>,
 		@InjectModel('Member') private readonly memberModel: Model<Member>,
+		private readonly notifications: NotificationService,
 	) {}
 
 	private id(value: unknown): Types.ObjectId {
@@ -224,6 +228,11 @@ export class SupportService {
 			{ new: true, runValidators: true },
 		).lean().exec();
 		if (!request) throw new ConflictException('Support request unavailable or already answered');
+		await this.notifications.record({
+			eventKey: `support:${String(request._id)}`, notificationType: NotificationType.SUPPORT_REPLY,
+			notificationGroup: NotificationGroup.MEMBER, notificationTitle: request.subject,
+			authorId: adminId, receiverId: request.memberId, supportRequestId: request._id,
+		});
 		return request;
 	}
 }

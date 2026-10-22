@@ -1,3 +1,4 @@
+import { NotificationModule } from './notification/notification.module';
 import { SupportModule } from './support/support.module';
 import { ReviewModule } from './review/review.module';
 import { MessagingModule } from './messaging/messaging.module';
@@ -13,6 +14,7 @@ import { BoardArticleModule } from './board-article/board-article.module';
 
 @Module({
 	imports: [
+		NotificationModule,
 		SupportModule,
 		MessagingModule,
 		ReviewModule,

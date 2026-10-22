@@ -63,8 +63,9 @@ function harness(status: ServiceStatus = ServiceStatus.ACTIVE) {
 	const members = { memberStatsEditor: jest.fn().mockResolvedValue(provider) };
 	const views = { recordView: jest.fn().mockResolvedValue(null), getVisitedServices: jest.fn().mockResolvedValue({ list: [], metaCounter: [] }) };
 	const likes = { toggleLike: jest.fn().mockResolvedValue(1), checkLikeExistence: jest.fn().mockResolvedValue([]), getFavoriteServices: jest.fn().mockResolvedValue({ list: [], metaCounter: [] }) };
-	const service = new ServiceService(serviceModel as any, members as any, views as any, likes as any, memberModel as any);
-	return { service, serviceModel, memberModel, memberQuery, members, views, likes };
+	const notifications = { record: jest.fn().mockResolvedValue(undefined) };
+	const service = new ServiceService(serviceModel as any, members as any, views as any, likes as any, memberModel as any, notifications as any);
+	return { service, serviceModel, memberModel, memberQuery, members, views, likes, notifications };
 }
 
 function inputErrors(type: any, data: object) {
@@ -205,9 +206,21 @@ describe('Service lifecycle and discovery (mocked persistence)', () => {
 		expect(h.members.memberStatsEditor).not.toHaveBeenCalled();
 	});
 
+	it('notifies an AGENT only for an ADMIN status transition, never for ordinary edits or same status', async () => {
+		const h = harness();
+		await h.service.updateService(memberId as any, { _id: serviceId as any, serviceStatus: ServiceStatus.PAUSED });
+		expect(h.notifications.record).not.toHaveBeenCalled();
+		await h.service.updateServiceByAdmin({ _id: serviceId as any, serviceStatus: ServiceStatus.ACTIVE }, memberId as any);
+		expect(h.notifications.record).not.toHaveBeenCalled();
+		await h.service.updateServiceByAdmin({ _id: serviceId as any, serviceStatus: ServiceStatus.PAUSED }, memberId as any);
+		expect(h.notifications.record).toHaveBeenCalledWith(expect.objectContaining({
+			notificationType: 'SERVICE_STATUS', receiverId: memberId, serviceStatus: ServiceStatus.PAUSED, serviceId,
+		}));
+	});
+
 	it('admin update scopes by ID without owner restriction and still counts transitions', async () => {
 		const h = harness(ServiceStatus.PAUSED);
-		await h.service.updateServiceByAdmin({ _id: serviceId as any, serviceStatus: ServiceStatus.ACTIVE });
+		await h.service.updateServiceByAdmin({ _id: serviceId as any, serviceStatus: ServiceStatus.ACTIVE }, memberId as any);
 		expect(h.serviceModel.findOneAndUpdate.mock.calls[0][0]).toEqual({ _id: serviceId, serviceStatus: ServiceStatus.PAUSED });
 		expect(h.members.memberStatsEditor).toHaveBeenCalledWith({ _id: memberId, targetKey: 'memberServices', modifier: 1 });
 	});

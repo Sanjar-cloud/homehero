@@ -1,3 +1,4 @@
+import { NotificationModule } from '../notification/notification.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import ConversationSchema from '../../schemas/Conversation.model';
@@ -11,6 +12,7 @@ import { MessagingGuard } from './messaging.guard';
 
 @Module({
 	imports: [
+		NotificationModule,
 		AuthModule,
 		ServiceModule,
 		MongooseModule.forFeature([

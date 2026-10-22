@@ -36,7 +36,9 @@ function harness() {
 			if (!pair.some((member) => String(member) === String(id))) throw new Error('denied');
 		}),
 	};
-	const gateway = new SocketGateway(auth as any, messaging as any);
+	const notificationChanges = new Subject<string>();
+	const notifications = { changes: notificationChanges.asObservable(), activeMember: jest.fn(async (id) => ({ _id: id })) };
+	const gateway = new SocketGateway(auth as any, messaging as any, notifications as any);
 	gateway.onModuleInit();
 	const sockets: OfflineSocket[] = [];
 	function connect() {
@@ -45,13 +47,31 @@ function harness() {
 	async function login(id: Types.ObjectId) {
 		const socket = connect(); await gateway.authenticate(socket as any, { token: String(id) }); return socket;
 	}
-	return { gateway, events, auth, messaging, connect, login, sockets };
+	return { gateway, events, auth, messaging, connect, login, sockets, notificationChanges, notifications };
 }
 
 describe('Private WebSocket gateway (no server/network/database)', () => {
 	let h: ReturnType<typeof harness>;
 	beforeEach(() => { jest.useFakeTimers(); h = harness(); });
 	afterEach(() => { h.gateway.onModuleDestroy(); jest.useRealTimers(); });
+
+	it('sends notification changes only to the receiver across tabs with no private event content', async () => {
+		const first = await h.login(agentId); const second = await h.login(agentId); const other = await h.login(userId);
+		h.notificationChanges.next(String(agentId)); await flush();
+		for (const socket of [first, second]) expect(JSON.parse(socket.send.mock.calls[1][0])).toEqual({ event: 'notification:changed', data: { memberId: String(agentId) } });
+		expect(other.send).toHaveBeenCalledTimes(1);
+	});
+
+	it('rechecks revoked accounts and token expiry before notification delivery', async () => {
+		const revoked = await h.login(agentId);
+		h.notifications.activeMember.mockRejectedValueOnce(new Error('blocked'));
+		h.notificationChanges.next(String(agentId)); await flush();
+		expect(revoked.close).toHaveBeenCalled(); expect(revoked.send).toHaveBeenCalledTimes(1);
+		const expired = await h.login(userId);
+		jest.advanceTimersByTime(61000);
+		h.notificationChanges.next(String(userId)); await flush();
+		expect(expired.close).toHaveBeenCalled(); expect(expired.send).toHaveBeenCalledTimes(1);
+	});
 
 	it('uses /ws and the installed adapter event/data authentication protocol offline', async () => {
 		expect(Reflect.getMetadata(GATEWAY_OPTIONS, SocketGateway)).toEqual({ path: '/ws', maxPayload: 16 * 1024 });

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ObjectId } from 'mongoose';
 import { Member, Members } from '../../libs/dto/member/member';
@@ -27,13 +27,23 @@ export class MemberService {
 	) {}
 
 	public async signup(input: MemberInput): Promise<Member> {
+		const memberType = input.memberType ?? MemberType.USER;
+		if (memberType !== MemberType.USER && memberType !== MemberType.AGENT) {
+			throw new ForbiddenException('Only USER or AGENT signup is allowed.');
+		}
 		input.memberPassword = await this.authService.hashPassword(input.memberPassword);
 		try {
-			const result = await this.memberModel.create(input);
+			const result = await this.memberModel.create({
+				memberNick: input.memberNick,
+				memberPhone: input.memberPhone,
+				memberPassword: input.memberPassword,
+				memberType,
+				...(input.memberAuthType != null ? { memberAuthType: input.memberAuthType } : {}),
+			});
 			result.accessToken = await this.authService.createToken(result); //create Token
 			return result;
 		} catch (err) {
-			console.log('Error, Service.model:', err.message);
+			console.log('Signup request failed');
 			throw new BadRequestException(Message.USED_MEMBER_NICK_OR_PHONE);
 		}
 	}
@@ -57,19 +67,26 @@ export class MemberService {
 		const isMatch = await this.authService.comparePasswords(input.memberPassword, response.memberPassword);
 		if (!isMatch) throw new InternalServerErrorException(Message.WRONG_PASSWORD);
 		response.accessToken = await this.authService.createToken(response);
-		console.log('accesToken:', response, response.accessToken);
 
 		return response;
 	}
 
 	public async updateMember(memberId: ObjectId, input: MemberUpdate): Promise<Member> {
+		if (input.memberType !== undefined || input.memberStatus !== undefined || input.memberPassword !== undefined) {
+			throw new ForbiddenException('Role, status and password cannot be changed through profile updates.');
+		}
+		const profile: Partial<MemberUpdate> = {};
+		const editableFields = ['memberNick', 'memberPhone', 'memberFullName', 'memberImage', 'memberAddress', 'memberDesc'] as const;
+		for (const field of editableFields) {
+			if (input[field] !== undefined) profile[field] = input[field];
+		}
 		const result: Member | null = await this.memberModel
 			.findOneAndUpdate(
 				{
 					_id: memberId,
 					memberStatus: MemberStatus.ACTIVE,
 				},
-				input,
+				{ $set: profile },
 				{ new: true },
 			)
 			.exec();

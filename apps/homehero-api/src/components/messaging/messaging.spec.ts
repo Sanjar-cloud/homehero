@@ -51,8 +51,9 @@ function harness() {
 		aggregate: jest.fn(() => query([{ list: [], metaCounter: [] }])),
 	};
 	const services = { assertServiceVisible: jest.fn(async (id) => ({ _id: id, memberId: agentId, serviceTitle: 'Plumbing' })) };
-	const service = new MessagingService(conversations as any, messages as any, members as any, services as any);
-	return { service, conversations, messages, members, accounts, services };
+	const notifications = { record: jest.fn().mockResolvedValue(undefined), messageEvent: jest.fn((message, receiverId) => ({ message, receiverId })) };
+	const service = new MessagingService(conversations as any, messages as any, members as any, services as any, notifications as any);
+	return { service, conversations, messages, members, accounts, services, notifications };
 }
 const send = { conversationId: String(conversationId), text: 'Hello' };
 
@@ -88,6 +89,16 @@ describe('Messaging models and validation', () => {
 });
 
 describe('Messaging persistence and permissions', () => {
+	it('persists the recipient notification before publishing the realtime message', async () => {
+		const h = harness();
+		const order: string[] = [];
+		h.notifications.record.mockImplementation(async () => { order.push('notification'); });
+		h.service.messageEvents.subscribe(() => order.push('message'));
+		const result = await h.service.sendMessage(userId, send);
+		expect(h.notifications.messageEvent).toHaveBeenCalledWith(result, agentId);
+		expect(order).toEqual(['notification', 'message']);
+	});
+
 	it('uses the same pair for different services, creates no messages or stored context', async () => {
 		const h = harness();
 		const first = await h.service.startConversation(userId, { serviceId: String(serviceId) });
